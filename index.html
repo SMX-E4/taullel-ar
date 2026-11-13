@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Taulell AR</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--ink:#1d1b2e;--paper:#fff8ec;--pin:#e63946;--accent:#ffd43b;--glass:rgba(255,255,255,.16);--glass-b:rgba(255,255,255,.35);--font:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;font-family:var(--font);color:#fff;overflow:hidden;background:#000}
+button,input,select,textarea{font:inherit}
+.screen{position:fixed;inset:0;z-index:20;display:none;flex-direction:column;padding:max(20px,env(safe-area-inset-top)) 22px max(22px,env(safe-area-inset-bottom));overflow-y:auto}
+.screen.on{display:flex}
+#home{background:repeating-linear-gradient(45deg,#b9814a 0 14px,#c38d55 14px 28px);align-items:center;justify-content:center;text-align:center}
+.note0{background:var(--paper);color:var(--ink);border-radius:6px;padding:26px 22px 18px;max-width:380px;width:100%;position:relative;box-shadow:0 14px 30px rgba(0,0,0,.35);transform:rotate(-1.2deg)}
+.note0::before{content:"";position:absolute;top:-10px;left:50%;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:var(--pin);box-shadow:0 3px 5px rgba(0,0,0,.4)}
+.note0 h1{margin:6px 0 4px;font-size:2.4rem;letter-spacing:-1px}.note0 p{margin:0 0 18px;line-height:1.4}
+#sync{display:block;margin-top:14px;opacity:.75}
+.btn{display:block;width:100%;border:0;border-radius:14px;padding:16px;font-weight:700;font-size:1.05rem;cursor:pointer;margin-top:10px}
+.btn.main{background:var(--ink);color:#fff}.btn.alt{background:var(--accent);color:var(--ink)}
+.btn.ghost{background:transparent;color:var(--ink);border:2px dashed var(--ink)}
+.btn.light{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.7)}
+.btn:disabled{opacity:.5}
+.glass{background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:18px}
+#cork{position:fixed;inset:0;z-index:0;display:none;background:repeating-linear-gradient(45deg,#b9814a 0 14px,#c38d55 14px 28px)}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:none;background:#000}
+#dbg{position:fixed;inset:0;z-index:3;pointer-events:none;display:none}
+#hud{position:fixed;z-index:10;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;display:none;gap:10px;align-items:center;padding:8px 12px}
+#hud.on{display:flex}#hud b{flex:1}
+#hud button{border:0;background:rgba(255,255,255,.88);color:var(--ink);border-radius:12px;padding:10px 14px;font-weight:700;min-height:44px}
+#hint{position:fixed;z-index:10;left:20px;right:20px;bottom:110px;padding:14px;text-align:center;display:none}
+#fab{position:fixed;z-index:15;left:16px;right:16px;bottom:max(18px,env(safe-area-inset-bottom));display:none;border:0;border-radius:20px;padding:18px;font-weight:800;font-size:1.1rem;background:var(--accent);color:var(--ink);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+#fab.on{display:block}
+/* Tauler: 900x600 (segons BOARD_ASPECT). En AR s'ajusta als 4 post-its amb matrix3d. Les notícies són lliures (left/top en %). */
+#board{position:fixed;left:0;top:0;transform-origin:0 0;z-index:5;display:none;border-radius:14px;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 6px rgba(255,255,255,.35)}
+#board.on{display:block}
+.note{position:absolute;width:250px;min-height:150px;padding:20px 20px 16px;border-radius:6px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 16px rgba(0,0,0,.4);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.note::before{content:"";position:absolute;top:-8px;left:50%;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:var(--pin);box-shadow:0 2px 4px rgba(0,0,0,.5)}
+.note small{font-size:22px;font-weight:700}
+.note h3{margin:0;font-size:32px;line-height:1.1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.note span{margin-top:auto;align-self:flex-start;background:rgba(255,255,255,.92);color:var(--ink);border-radius:10px;padding:6px 14px;font-size:22px;font-weight:700}
+.note.p{width:230px;min-height:0;padding:0;gap:0;overflow:visible}
+.note.p img{display:block;width:100%;border-radius:6px 6px 0 0;pointer-events:none;-webkit-user-drag:none}
+.note.p b{padding:8px 10px;font-size:20px;line-height:1.15}
+.note.drag{cursor:grabbing;box-shadow:0 18px 30px rgba(0,0,0,.55)}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font-size:40px;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,.6);pointer-events:none}
+.pi{position:absolute;width:96px;height:96px;background:#ffd43b;box-shadow:0 6px 10px rgba(0,0,0,.35);display:none;pointer-events:none;z-index:0}
+#board.pv .pi{display:block}
+.pi:nth-child(1){left:-14px;top:-14px;transform:rotate(-6deg)}.pi:nth-child(2){right:-14px;top:-14px;transform:rotate(5deg)}
+.pi:nth-child(3){right:-14px;bottom:-14px;transform:rotate(-4deg)}.pi:nth-child(4){left:-14px;bottom:-14px;transform:rotate(7deg)}
+#qr{background:#2b2742;align-items:center;text-align:center}
+#qr header{display:flex;gap:10px;align-items:center;width:100%;margin-bottom:14px}#qr header b{flex:1;font-size:1.3rem;text-align:left}
+.back{border:0;background:var(--accent);color:var(--ink);border-radius:12px;padding:10px 14px;font-weight:700;min-height:44px}
+#qrbox{background:#fff;padding:14px;border-radius:12px;margin:10px 0;display:inline-block}
+#qr input{width:100%;padding:12px;border-radius:10px;border:0;margin:8px 0;color:var(--ink)}
+#qrFinal{word-break:break-all;opacity:.8;font-size:.85rem}
+.sheet{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;justify-content:flex-end;background:rgba(10,8,25,.55)}
+.sheet.on{display:flex}
+.panel{background:rgba(29,27,46,.93);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:26px 26px 0 0;padding:24px 22px max(24px,env(safe-area-inset-bottom));max-height:92%;overflow-y:auto;border-top:6px solid var(--c,#fff)}
+.panel h2{margin:6px 0 4px;font-size:1.7rem;line-height:1.15}
+.panel .meta{opacity:.75;font-size:.9rem;margin-bottom:14px}.panel .ico{font-size:3.2rem}
+.panel p{line-height:1.55;font-size:1.05rem;white-space:pre-wrap}
+.panel .poster{width:100%;border-radius:12px;margin:8px 0 4px;background:#fff}
+.panel label.l{display:block;margin:14px 0 6px;font-weight:700}
+.panel input[type=text],.panel select,.panel textarea{width:100%;padding:14px;border-radius:12px;border:0;font-size:1rem;color:var(--ink)}
+.sw{display:flex;gap:12px;flex-wrap:wrap}
+.sw label{width:46px;height:46px;border-radius:50%;border:3px solid transparent;cursor:pointer}
+.sw input{display:none}
+.sw label:has(input:checked){border-color:#fff;box-shadow:0 0 0 3px var(--ink),0 0 0 5px #fff}
+.row{display:flex;gap:10px}.row .btn{flex:1}
+#fFile{display:none}#fFileSt{opacity:.8;font-size:.9rem;margin-top:6px}
+#toast{position:fixed;z-index:60;left:20px;right:20px;top:80px;padding:14px;text-align:center;display:none}
+</style>
+</head>
+<body>
+
+<section id="home" class="screen on">
+  <div class="note0">
+    <div style="font-size:2.6rem">📌</div>
+    <h1>Taulell AR</h1>
+    <p>Apunta la càmera al tauler amb els 4 post-it grocs a les cantonades i les notícies apareixeran a sobre.</p>
+    <button class="btn main" id="bStart">Activa la càmera AR</button>
+    <button class="btn alt" id="bQr">Veure el generador de codi QR</button>
+    <button class="btn ghost" id="bPrev">Mode vista prèvia (sense càmera)</button>
+    <small id="sync"></small>
+  </div>
+</section>
+
+<section id="qr" class="screen">
+  <header><button class="back" id="qBack">← Inici</button><b>Codi QR del tauler</b></header>
+  <p>Escriu l'adreça on has publicat l'app. El QR obrirà la càmera AR directament.</p>
+  <input id="qrUrl" type="text" aria-label="Adreça de l'app">
+  <div id="qrbox"></div>
+  <div id="qrFinal"></div>
+  <p>Enganxa el QR al costat del tauler i un post-it groc a cada cantonada.</p>
+</section>
+
+<div id="cork"></div>
+<video id="cam" playsinline muted autoplay></video>
+<canvas id="dbg"></canvas>
+<div id="board"></div>
+<div id="hud" class="glass"><b id="hudT">📌 Taulell AR</b><button id="bExit">Sortir</button></div>
+<div id="hint" class="glass"></div>
+<button id="fab">＋ Publica al tauler</button>
+<div id="toast" class="glass"></div>
+
+<div id="read" class="sheet"><div class="panel" id="readPanel"></div></div>
+
+<div id="add" class="sheet"><div class="panel">
+  <h2>Nova notícia</h2>
+  <form id="form" autocomplete="off">
+    <label class="l" for="fT">Títol</label><input id="fT" type="text" maxlength="60" required>
+    <label class="l" for="fC">Categoria</label><select id="fC"></select>
+    <label class="l" for="fD">Descripció</label><textarea id="fD" rows="3" maxlength="500"></textarea>
+    <label class="l">Cartell (opcional)</label>
+    <button type="button" class="btn light" id="fFileBtn">📎 Importa un PDF o una imatge</button>
+    <input id="fFile" type="file" accept="application/pdf,image/*">
+    <div id="fFileSt"></div>
+    <label class="l" for="fA">Autor/a (opcional)</label><input id="fA" type="text" maxlength="40">
+    <label class="l">Color de la targeta</label><div class="sw" id="sw"></div>
+    <div class="row" style="margin-top:20px">
+      <button type="button" class="btn light" id="fCancel">Cancel·la</button>
+      <button type="submit" class="btn alt" id="fOk">Publica</button>
+    </div>
+  </form>
+</div></div>
+
+<script type="module">
+/* ============ CONFIGURACIÓ ============ */
+/* Enganxa aquí la configuració de Firebase (veure instruccions). Si és null, l'app va en mode local. */
+const FIREBASE_CONFIG={apiKey: "AIzaSyCJgrdaDPQKYR2V5nbLbyOTu70gHGAGn4Y",
+
+  authDomain: "taulell-ar.firebaseapp.com",
+
+  projectId: "taulell-ar",
+
+  storageBucket: "taulell-ar.firebasestorage.app",
+
+  messagingSenderId: "161850430198",
+
+  appId: "1:161850430198:web:0424d7aab297f043ec52d7"
+};
+/* const FIREBASE_CONFIG={apiKey:"...",authDomain:"...",projectId:"...",appId:"..."}; */
+const REQUIRE_SHARED=true;       // true: sense base de dades compartida l'AR queda desactivada (evita que cada mòbil vegi coses diferents)
+const REPORT_LIMIT=3;            // denúncies perquè una notícia s'amagui per a tothom
+const BOARD_ASPECT=1.5;          // ample/alt REAL del tauler (120x80 cm = 1.5)
+const BH=600,BW=Math.round(BH*BOARD_ASPECT);
+const PDFJS="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+
+const CATS={esports:{label:"Esports",icon:"🏓"},avisos:{label:"Avisos",icon:"📢"},cantina:{label:"Cantina",icon:"🍽️"},events:{label:"Esdeveniments",icon:"🎉"}};
+const COLORS=["#ff6b35","#3a86ff","#2ec4b6","#8338ec","#ef476f","#06d6a0"];
+const SEED=[
+ {id:"n1",cat:"esports",title:"Torneig de ping-pong al pati",date:"2026-11-20",author:"Departament d'Educació Física",color:"#ff6b35",x:.27,y:.3,z:1,reports:0,
+  desc:"Divendres 20 de novembre, durant l'esbarjo gran, comença el torneig de ping-pong del pati. Hi pots participar sol/a o en parella. Apunta't a la safata d'Educació Física abans de dijous. Hi haurà premi per a les tres primeres parelles!"},
+ {id:"n2",cat:"cantina",title:"Menú setmanal de la cantina",date:"2026-11-16",author:"Cantina de l'institut",color:"#2ec4b6",x:.72,y:.27,z:2,reports:0,
+  desc:"Dilluns: macarrons i pit de pollastre.\nDimarts: arròs tres delícies i truita.\nDimecres: llenties estofades i peix.\nDijous: canelons i amanida.\nDivendres: pizza casolana i fruita.\nTots els menús inclouen pa i beguda."},
+ {id:"n3",cat:"events",title:"Sortida Codi Gaudí",date:"2026-12-03",author:"Departament de Tecnologia",color:"#8338ec",x:.3,y:.72,z:3,reports:0,
+  desc:"El 3 de desembre farem l'excursió Codi Gaudí amb l'alumnat de 4t d'ESO. Sortida a les 8:30 des de la porta principal i tornada a les 15:00. Cal portar el carnet de l'institut, una motxilla amb esmorzar i l'autorització signada."},
+ {id:"n4",cat:"avisos",title:"Horari de tutories",date:"2026-11-12",author:"Direcció d'estudis",color:"#3a86ff",x:.74,y:.7,z:4,reports:0,
+  desc:"Recordatori de l'horari de tutories d'aquest trimestre: 1r i 2n d'ESO, dimarts a les 11:30. 3r i 4t d'ESO, dijous a les 11:30. Batxillerat, dimecres a les 8:00. Consulta la teva aula per saber l'espai."}
+];
+
+/* ============ UTILITATS ============ */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dark=h=>{const n=parseInt(h.slice(1),16);return(0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))<150;};
+const fmt=d=>{try{return new Date(d+"T12:00:00").toLocaleDateString("ca-ES",{day:"numeric",month:"long",year:"numeric"});}catch(e){return d;}};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rot=id=>{let h=0;for(const c of String(id))h=(h*31+c.charCodeAt(0))|0;return(Math.abs(h)%9)-4;};
+const okImg=s=>typeof s==="string"&&/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(s);
+let tt;function toast(m){const t=$("#toast");t.textContent=m;t.style.display="block";clearTimeout(tt);tt=setTimeout(()=>t.style.display="none",3800);}
+
+/* ============ DADES: Firebase (compartit) o localStorage (local) ============ */
+const LS="taulellAR.noticies.v2",LSR="taulellAR.denunciades";
+let hidden;try{hidden=new Set(JSON.parse(localStorage.getItem(LSR)||"[]"));}catch(e){hidden=new Set();}
+const Store={live:false,list:[],cbs:[],
+  emit(){this.cbs.forEach(f=>f(this.list));},
+  async init(){
+    if(FIREBASE_CONFIG){
+      try{
+        const B="https://www.gstatic.com/firebasejs/10.12.2/";
+        const [a,f]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-firestore.js")]);
+        this.fs=f;this.db=f.getFirestore(a.initializeApp(FIREBASE_CONFIG));this.col=f.collection(this.db,"noticies");
+        f.onSnapshot(this.col,s=>{
+          if(s.empty&&!s.metadata.fromCache&&!this.seeded){   // primer cop: carrega els exemples una sola vegada (ids fixos, sense duplicats)
+            this.seeded=true;SEED.forEach(({id,...d})=>f.setDoc(f.doc(this.db,"noticies",id),d).catch(()=>{}));return;}
+          this.list=s.docs.map(d=>({id:d.id,...d.data()}));this.emit();
+        },err=>{toast("Error de connexió amb el tauler.");$("#sync").textContent="⚠ Error de Firebase: "+(err.code||err.message)+". Revisa les regles de Firestore.";});
+        this.live=true;return;
+      }catch(e){toast("Firebase no disponible. S'usa el mode local.");}
+    }
+    try{this.list=JSON.parse(localStorage.getItem(LS));}catch(e){}
+    if(!Array.isArray(this.list)){this.list=SEED.map(n=>({...n}));this._save();}
+    this.emit();
+  },
+  _save(){try{localStorage.setItem(LS,JSON.stringify(this.list));}catch(e){toast("No hi ha espai per desar (cartell massa gran).");}},
+  async add(n){if(this.live)await this.fs.addDoc(this.col,n);else{n.id="n"+Date.now();this.list.push(n);this._save();this.emit();}},
+  async move(id,x,y,z){
+    if(this.live)await this.fs.updateDoc(this.fs.doc(this.db,"noticies",id),{x,y,z});
+    else{Object.assign(this.list.find(n=>n.id===id)||{},{x,y,z});this._save();this.emit();}
+  },
+  async report(id){
+    if(this.live)await this.fs.updateDoc(this.fs.doc(this.db,"noticies",id),{reports:this.fs.increment(1)});
+    else{const n=this.list.find(n=>n.id===id);if(n){n.reports=(n.reports||0)+1;this._save();this.emit();}}
+  }
+};
+
+/* ============ ESTAT ============ */
+let notes=[],mode="home",stream=null,drag=null,pending=false,quad=null;
+const maxZ=()=>notes.reduce((m,n)=>Math.max(m,n.z||0),0);
+Store.cbs.push(l=>{
+  notes=l.filter(n=>!hidden.has(n.id)&&(n.reports||0)<REPORT_LIMIT);
+  if(drag){pending=true;return;}
+  if(mode==="ar"||mode==="preview")renderBoard();
+});
+
+/* ============ MODES ============ */
+function setMode(m){
+  mode=m;
+  document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===m));
+  $("#cam").style.display=m==="ar"?"block":"none";
+  $("#dbg").style.display=m==="ar"?"block":"none";
+  $("#cork").style.display=m==="preview"?"block":"none";
+  const live=m==="ar"||m==="preview";
+  $("#hud").classList.toggle("on",live);$("#fab").classList.toggle("on",live);
+  $("#hint").style.display=live?"block":"none";
+  if(m==="preview")$("#hint").textContent="Arrossega les notícies per enganxar-les on vulguis. Toca per llegir.";
+  $("#hudT").textContent=m==="preview"?"Vista prèvia":"📌 Taulell AR";
+  const b=$("#board");b.classList.toggle("pv",m==="preview");b.classList.toggle("on",m==="preview");
+  if(m==="preview"){renderBoard();fitPreview();}
+  if(m!=="ar")stopCam();
+}
+$("#bPrev").onclick=()=>setMode("preview");
+$("#bExit").onclick=()=>setMode("home");
+$("#qBack").onclick=()=>setMode("home");
+$("#bQr").onclick=()=>{setMode("qr");$("#qrUrl").value=location.href.split("#")[0].split("?")[0];makeQR();};
+$("#qrUrl").oninput=makeQR;
+function makeQR(){
+  let u;try{u=new URL($("#qrUrl").value||location.href,location.href);u.searchParams.set("ar","1");}catch(e){return;}
+  $("#qrbox").innerHTML="";new QRCode($("#qrbox"),{text:u.href,width:210,height:210});$("#qrFinal").textContent=u.href;
+}
+addEventListener("resize",()=>{if(mode==="preview")fitPreview();});
+function fitPreview(){
+  const sw=innerWidth,sh=innerHeight,sc=Math.min((sw-36)/BW,(sh-200)/BH),tx=(sw-BW*sc)/2,ty=(sh-BH*sc)/2-10;
+  $("#board").style.transform=`translate(${tx}px,${ty}px) scale(${sc})`;
+  quad=[[tx,ty],[tx+BW*sc,ty],[tx+BW*sc,ty+BH*sc],[tx,ty+BH*sc]];
+}
+
+/* ============ TAULER: notícies lliures ============ */
+function noteHTML(n){
+  const c=CATS[n.cat]||CATS.avisos,tc=dark(n.color)?"#fff":"#1d1b2e";
+  const st=`left:${clamp(n.x??.5,0,1)*100}%;top:${clamp(n.y??.5,0,1)*100}%;z-index:${(n.z||1)+1};transform:translate(-50%,-50%) rotate(${rot(n.id)}deg);background:${esc(n.color)};color:${tc}`;
+  if(okImg(n.img))return`<div class="note p" data-id="${esc(n.id)}" style="${st}"><img src="${n.img}" alt=""><b>${c.icon} ${esc(n.title)}</b></div>`;
+  return`<div class="note" data-id="${esc(n.id)}" style="${st}"><small>${c.icon} ${c.label}</small><h3>${esc(n.title)}</h3><span>Llegir més</span></div>`;
+}
+function renderBoard(){
+  const b=$("#board");b.style.width=BW+"px";b.style.height=BH+"px";
+  b.innerHTML='<i class="pi"></i><i class="pi"></i><i class="pi"></i><i class="pi"></i>'+
+    (notes.length?notes.map(noteHTML).join(""):'<div class="empty">El tauler és buit.<br>Publica la primera notícia!</div>');
+}
+/* Pantalla -> coordenades del tauler (homografia inversa del quadrilàter actual) */
+function toBoard(px,py){
+  if(!quad)return null;
+  const h=hCoef(quad,[[0,0],[BW,0],[BW,BH],[0,BH]]);if(!h)return null;
+  const[a,b,c,d,e,f,g,k]=h,w=g*px+k*py+1;
+  return[(a*px+b*py+c)/w,(d*px+e*py+f)/w];
+}
+const board=$("#board");
+board.addEventListener("pointerdown",e=>{
+  const el=e.target.closest(".note");if(!el)return;
+  drag={id:el.dataset.id,el,sx:e.clientX,sy:e.clientY,moved:false,pid:e.pointerId};
+  try{el.setPointerCapture(e.pointerId);}catch(_){}
+});
+board.addEventListener("pointermove",e=>{
+  if(!drag||e.pointerId!==drag.pid)return;
+  if(!drag.moved){if(Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)<10)return;drag.moved=true;drag.el.classList.add("drag");drag.el.style.zIndex=maxZ()+5;}
+  const p=toBoard(e.clientX,e.clientY);if(!p)return;
+  drag.x=clamp(p[0]/BW,.04,.96);drag.y=clamp(p[1]/BH,.05,.95);
+  drag.el.style.left=drag.x*100+"%";drag.el.style.top=drag.y*100+"%";
+});
+const endDrag=async e=>{
+  if(!drag||e.pointerId!==drag.pid)return;
+  const d=drag;drag=null;d.el.classList.remove("drag");
+  if(e.type==="pointercancel"){if(pending){pending=false;renderBoard();}return;}
+  if(!d.moved)openRead(d.id);
+  else if(d.x!=null){try{await Store.move(d.id,d.x,d.y,maxZ()+1);}catch(_){toast("No s'ha pogut desar la posició.");}}
+  if(pending){pending=false;renderBoard();}
+};
+board.addEventListener("pointerup",endDrag);board.addEventListener("pointercancel",endDrag);
+
+/* ============ CÀMERA + DETECCIÓ DELS 4 POST-IT GROCS ============ */
+const det={cv:document.createElement("canvas"),sm:null,seen:0,timer:0,told:false};
+const dctx=det.cv.getContext("2d",{willReadFrequently:true});
+$("#bStart").onclick=startAR;
+async function startAR(){
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false});}
+  catch(e){toast("No s'ha pogut accedir a la càmera (cal HTTPS i permís). Prova la vista prèvia.");setMode("home");return;}
+  const v=$("#cam");v.srcObject=stream;try{await v.play();}catch(e){}
+  try{const t=stream.getVideoTracks()[0],cp=t.getCapabilities?t.getCapabilities():{};
+    if(cp.focusMode&&cp.focusMode.includes("continuous"))await t.applyConstraints({advanced:[{focusMode:"continuous"}]});}catch(e){}
+  setMode("ar");renderBoard();
+  det.sm=null;det.seen=0;clearInterval(det.timer);det.timer=setInterval(detect,130);
+}
+function stopCam(){clearInterval(det.timer);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}$("#cam").srcObject=null;}
+function blobs(){
+  const v=$("#cam");if(!v.videoWidth)return null;
+  const W=480,H=Math.round(W*v.videoHeight/v.videoWidth);          // 480 px d'ample: els post-it petits segueixen tenint píxels
+  det.cv.width=W;det.cv.height=H;dctx.drawImage(v,0,0,W,H);
+  const d=dctx.getImageData(0,0,W,H).data,m=new Uint8Array(W*H),out=[],st=[];
+  for(let i=0,p=0;i<d.length;i+=4,p++){
+    const r=d[i],g=d[i+1],bl=d[i+2];
+    if(bl>=r||bl>=g)continue;                                       // el blau ha de ser el canal més baix
+    const mx=r>g?r:g,df=mx-bl;
+    if(mx<100||df<0.34*mx)continue;                                 // prou llum i saturació (tolera ombra i pastel)
+    const h=r>=g?60*(g-bl)/df:120-60*(r-bl)/df;                     // to en graus
+    if(h>=38&&h<=75)m[p]=1;
+  }
+  for(let s=0;s<m.length;s++){
+    if(m[s]!==1)continue;let n=0,sx=0,sy=0,x0=W,x1=0,y0=H,y1=0;st.push(s);m[s]=2;
+    while(st.length){const p=st.pop(),x=p%W,y=(p/W)|0;n++;sx+=x;sy+=y;
+      if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+      if(x>0&&m[p-1]===1){m[p-1]=2;st.push(p-1);}
+      if(x<W-1&&m[p+1]===1){m[p+1]=2;st.push(p+1);}
+      if(y>0&&m[p-W]===1){m[p-W]=2;st.push(p-W);}
+      if(y<H-1&&m[p+W]===1){m[p+W]=2;st.push(p+W);}}
+    const bw=x1-x0+1,bh=y1-y0+1,asp=bw/bh;
+    if(n>=14&&asp>.45&&asp<2.2&&n/(bw*bh)>.4)out.push({n,x:sx/n/W,y:sy/n/H});   // només taques quadrades (post-it), no tires ni objectes llargs
+  }
+  return out.sort((a,b)=>b.n-a.n).slice(0,8);
+}
+function toScreen(p,v){
+  const sw=innerWidth,sh=innerHeight,vw=v.videoWidth,vh=v.videoHeight,k=Math.max(sw/vw,sh/vh);
+  return[p.x*vw*k+(sw-vw*k)/2,p.y*vh*k+(sh-vh*k)/2];
+}
+const ordered=q=>{const s=q.map(p=>p.x+p.y),d=q.map(p=>p.x-p.y);
+  return[q[s.indexOf(Math.min(...s))],q[d.indexOf(Math.max(...d))],q[s.indexOf(Math.max(...s))],q[d.indexOf(Math.min(...d))]];};
+function quadScore(o){
+  if(new Set(o).size<4)return 0;
+  let a=0,sg=0;
+  for(let i=0;i<4;i++){const p=o[i],r=o[(i+1)%4],t=o[(i+2)%4];
+    a+=p.x*r.y-r.x*p.y;const c=(r.x-p.x)*(t.y-r.y)-(r.y-p.y)*(t.x-r.x);if(!c)return 0;sg+=c>0?1:-1;}
+  if(Math.abs(sg)!==4)return 0;                                     // ha de ser convex
+  const ns=o.map(p=>p.n),sim=Math.min(...ns)/Math.max(...ns);
+  return sim<.2?0:Math.abs(a)/2*sim;
+}
+function bestQuad(c){                                               // tria la millor combinació de 4 entre les candidates
+  let best=null,bs=0;
+  for(let a=0;a<c.length;a++)for(let b=a+1;b<c.length;b++)for(let e=b+1;e<c.length;e++)for(let f=e+1;f<c.length;f++){
+    const o=ordered([c[a],c[b],c[e],c[f]]),sc=quadScore(o);if(sc>bs){bs=sc;best=o;}}
+  return bs>0.01?best:null;
+}
+function guess3(c,prev){                                            // si en falta un, el dedueix del moviment dels altres 3
+  const idx=c.map(p=>{let bi=0,bd=9;prev.forEach((q,i)=>{const dd=Math.hypot(p.x-q.x,p.y-q.y);if(dd<bd){bd=dd;bi=i;}});return bi;});
+  if(new Set(idx).size<3)return null;
+  const m=[0,1,2,3].find(i=>!idx.includes(i));let dx=0,dy=0;
+  c.forEach((p,j)=>{dx+=p.x-prev[idx[j]].x;dy+=p.y-prev[idx[j]].y;});dx/=3;dy/=3;
+  const o=[];idx.forEach((i,j)=>o[i]=c[j]);o[m]={x:prev[m].x+dx,y:prev[m].y+dy,n:prev[m].n};return o;
+}
+function drawDbg(bl,o,v){
+  const cv=$("#dbg");if(cv.width!==innerWidth)cv.width=innerWidth;if(cv.height!==innerHeight)cv.height=innerHeight;
+  const g=cv.getContext("2d");g.clearRect(0,0,cv.width,cv.height);g.lineWidth=3;
+  bl.forEach(p=>{const[x,y]=toScreen(p,v);g.strokeStyle=o&&o.includes(p)?"#2ee66b":"rgba(255,255,255,.85)";g.beginPath();g.arc(x,y,16,0,7);g.stroke();});
+}
+function detect(){
+  const v=$("#cam"),bl=blobs();if(!bl)return;
+  const hint=$("#hint"),b=$("#board"),now=performance.now();
+  let o=bl.length>=4?bestQuad(bl):null;
+  if(!o&&bl.length>=3&&det.nq&&now-det.seen<1500)o=guess3(bl.slice(0,3),det.nq);
+  drawDbg(bl,o,v);
+  if(o){
+    det.nq=o;const pts=o.map(p=>toScreen(p,v));
+    det.sm=det.sm&&now-det.seen<800?det.sm.map((q,i)=>[q[0]+(pts[i][0]-q[0])*.5,q[1]+(pts[i][1]-q[1])*.5]):pts;
+    det.seen=now;
+    const h=hCoef([[0,0],[BW,0],[BW,BH],[0,BH]],det.sm);
+    if(h){const[a,bb,c,d,e,f,g,k]=h;
+      b.style.transform=`matrix3d(${a},${d},0,${g},${bb},${e},0,${k},0,0,1,0,${c},${f},0,1)`;
+      quad=det.sm;b.classList.add("on");hint.style.display="none";
+      if(!det.told){det.told=true;toast("Arrossega una notícia per enganxar-la on vulguis.");}}
+  }else if(now-det.seen>1200){
+    b.classList.remove("on");det.sm=null;quad=null;det.nq=null;hint.style.display="block";
+    hint.textContent=`Post-it detectats: ${Math.min(bl.length,3)}/4. Els 4 han de veure's bé i amb llum.`;
+  }
+}
+/* Coeficients de la homografia src->dst (8 incògnites, eliminació gaussiana) */
+function hCoef(src,dst){
+  const A=[],y=[];
+  for(let i=0;i<4;i++){const[x,yy]=src[i],[u,v]=dst[i];
+    A.push([x,yy,1,0,0,0,-u*x,-u*yy]);y.push(u);A.push([0,0,0,x,yy,1,-v*x,-v*yy]);y.push(v);}
+  const n=8;
+  for(let i=0;i<n;i++){let m=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[m][i]))m=r;
+    [A[i],A[m]]=[A[m],A[i]];[y[i],y[m]]=[y[m],y[i]];
+    for(let r=i+1;r<n;r++){const f=A[r][i]/A[i][i];for(let c=i;c<n;c++)A[r][c]-=f*A[i][c];y[r]-=f*y[i];}}
+  const x=Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){let s=y[i];for(let c=i+1;c<n;c++)s-=A[i][c]*x[c];x[i]=s/A[i][i];}
+  return x.some(v=>!isFinite(v))?null:x;
+}
+
+/* ============ LECTURA + DENÚNCIA ============ */
+function openRead(id){
+  const n=notes.find(x=>x.id===id);if(!n)return;
+  const c=CATS[n.cat]||CATS.avisos,p=$("#readPanel");p.style.setProperty("--c",n.color);
+  p.innerHTML=`<div class="ico">${c.icon}</div>
+    <div class="meta">${c.label} · ${fmt(n.date)} · ${esc(n.author||"Anònim")}</div>
+    <h2>${esc(n.title)}</h2>${okImg(n.img)?`<img class="poster" src="${n.img}" alt="">`:""}
+    ${n.desc?`<p>${esc(n.desc)}</p>`:""}
+    <button class="btn alt" id="rClose">Tanca</button>
+    <button class="btn light" id="rReport">🚩 Denuncia la notícia</button>`;
+  $("#read").classList.add("on");
+  $("#rClose").onclick=()=>$("#read").classList.remove("on");
+  $("#rReport").onclick=async()=>{
+    if(!confirm("Vols denunciar aquesta notícia? Deixaràs de veure-la."))return;
+    hidden.add(id);try{localStorage.setItem(LSR,JSON.stringify([...hidden]));}catch(e){}
+    try{await Store.report(id);}catch(e){}
+    notes=notes.filter(x=>x.id!==id);renderBoard();
+    $("#read").classList.remove("on");toast("Notícia denunciada. El professorat la revisarà.");
+  };
+}
+$("#read").onclick=e=>{if(e.target.id==="read")e.target.classList.remove("on");};
+
+/* ============ PUBLICAR (text i/o cartell PDF/imatge) ============ */
+$("#fC").innerHTML=Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join("");
+$("#sw").innerHTML=COLORS.map((c,i)=>`<label style="background:${c}"><input type="radio" name="col" value="${c}" ${i?"":"checked"}></label>`).join("");
+let pendingImg=null;
+$("#fab").onclick=()=>$("#add").classList.add("on");
+$("#fCancel").onclick=()=>{$("#add").classList.remove("on");};
+$("#fFileBtn").onclick=()=>$("#fFile").click();
+function toJpeg(src,w,h){
+  const k=Math.min(1,900/w),cw=Math.round(w*k),ch=Math.round(h*k),c=document.createElement("canvas");
+  c.width=cw;c.height=ch;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,cw,ch);x.drawImage(src,0,0,cw,ch);
+  for(let q=.8;q>=.3;q-=.1){const u=c.toDataURL("image/jpeg",q);if(u.length<700000)return u;}
+  return null;
+}
+const loadScript=u=>new Promise((ok,ko)=>{const s=document.createElement("script");s.src=u;s.onload=ok;s.onerror=ko;document.head.appendChild(s);});
+async function fileToImg(f){
+  if(f.type==="application/pdf"){
+    if(!window.pdfjsLib){await loadScript(PDFJS+"pdf.min.js");pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+"pdf.worker.min.js";}
+    const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+    const pg=await pdf.getPage(1),v0=pg.getViewport({scale:1}),vp=pg.getViewport({scale:900/v0.width});
+    const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;
+    await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    return toJpeg(c,c.width,c.height);
+  }
+  const bm=await createImageBitmap(f);return toJpeg(bm,bm.width,bm.height);
+}
+$("#fFile").onchange=async e=>{
+  const f=e.target.files[0];pendingImg=null;if(!f){$("#fFileSt").textContent="";return;}
+  $("#fFileSt").textContent="Processant el cartell…";$("#fOk").disabled=true;
+  try{pendingImg=await fileToImg(f);$("#fFileSt").textContent=pendingImg?"✓ Cartell afegit: "+f.name+(f.type==="application/pdf"?" (primera pàgina)":""):"El cartell és massa gran.";}
+  catch(err){$("#fFileSt").textContent="No s'ha pogut llegir el fitxer.";}
+  $("#fOk").disabled=false;
+};
+$("#form").onsubmit=async e=>{
+  e.preventDefault();
+  const d=$("#fD").value.trim();
+  if(!d&&!pendingImg){toast("Escriu una descripció o importa un cartell.");return;}
+  const n={cat:$("#fC").value,title:$("#fT").value.trim(),desc:d,author:$("#fA").value.trim()||"Anònim",
+    color:document.querySelector("input[name=col]:checked").value,date:new Date().toISOString().slice(0,10),
+    x:.5+(Math.random()-.5)*.2,y:.5+(Math.random()-.5)*.2,z:maxZ()+1,reports:0};
+  if(pendingImg)n.img=pendingImg;
+  $("#fOk").disabled=true;
+  try{await Store.add(n);$("#form").reset();pendingImg=null;$("#fFileSt").textContent="";$("#add").classList.remove("on");
+    toast("Publicada! Arrossega-la per enganxar-la on vulguis.");}
+  catch(err){toast("No s'ha pogut publicar. Torna-ho a provar.");}
+  $("#fOk").disabled=false;
+};
+
+/* ============ ARRENCADA ============ */
+Store.init().then(()=>{
+  const sy=$("#sync");
+  if(Store.live)sy.textContent="🟢 Tauler compartit: tothom veu el mateix";
+  else if(REQUIRE_SHARED){$("#bStart").disabled=true;sy.textContent="⚠ Falta connectar la base de dades compartida (Firebase). L'AR està desactivada perquè cada dispositiu veuria notícies diferents.";}
+  else sy.textContent="⚪ Mode local: les notícies només es veuen en aquest dispositiu";
+  if(Store.live&&new URLSearchParams(location.search).get("ar")==="1")startAR();   // el QR obre la càmera directament
+});
+</script>
+</body>
+</html>
