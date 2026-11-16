@@ -176,7 +176,18 @@ button,input,select,textarea{font:inherit;color:inherit}
 <script type="module">
 /* ============ CONFIGURACIÓ ============ */
 /* Enganxa aquí la configuració de Firebase (veure instruccions). Si és null, l'app va en mode local. */
-const FIREBASE_CONFIG=null;
+const FIREBASE_CONFIG={apiKey: "AIzaSyCJgrdaDPQKYR2V5nbLbyOTu70gHGAGn4Y",
+
+  authDomain: "taulell-ar.firebaseapp.com",
+
+  projectId: "taulell-ar",
+
+  storageBucket: "taulell-ar.firebasestorage.app",
+
+  messagingSenderId: "161850430198",
+
+  appId: "1:161850430198:web:0424d7aab297f043ec52d7"
+};
 /* const FIREBASE_CONFIG={apiKey:"...",authDomain:"...",projectId:"...",appId:"..."}; */
 const REQUIRE_SHARED=true;       // true: sense base de dades compartida l'AR queda desactivada (evita que cada mòbil vegi coses diferents)
 const REPORT_LIMIT=3;            // denúncies perquè una notícia s'amagui per a tothom
