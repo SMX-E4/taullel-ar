@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ca" data-lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@800;900&display=swap" rel="stylesheet">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>Taulell AR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+  <!-- Inici -->
+  <section id="home" class="screen on">
+    <nav class="menu" aria-label="Menú principal">
+      <button class="opt" id="bStart" data-i18n="start">Activa la càmera AR</button>
+      <button class="opt" id="bQr" data-i18n="qr">Generador de codi QR</button>
+      <button class="opt" id="bPrev" data-i18n="prev">Vista prèvia sense càmera</button>
+    </nav>
+    <div class="brand">
+      <h1 data-i18n="appTitle">Taulell<br>AR</h1>
+      <p data-i18n="subtitle">Les notícies de l'institut, sobre el tauler.</p>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn ghost" style="width:auto;min-height:auto;padding:6px 12px;font-size:.85rem" onclick="setLang('ca')" data-i18n="langCa">Català</button>
+        <button class="btn ghost" style="width:auto;min-height:auto;padding:6px 12px;font-size:.85rem" onclick="setLang('es')" data-i18n="langEs">Español</button>
+        <button class="btn ghost" style="width:auto;min-height:auto;padding:6px 12px;font-size:.85rem" onclick="setLang('en')" data-i18n="langEn">English</button>
+      </div>
+    </div>
+    <small id="sync"></small>
+  </section>
+
+  <!-- QR -->
+  <section id="qr" class="screen">
+    <header>
+      <button class="back" id="qBack" data-i18n="back">‹ Inici</button>
+      <b data-i18n="qrTitle">Codi QR del tauler</b>
+    </header>
+    <p data-i18n="qrDesc">Escriu l'adreça on has publicat l'app. El QR obrirà la càmera AR directament.</p>
+    <input id="qrUrl" type="text" aria-label="Adreça de l'app">
+    <div id="qrbox"></div>
+    <div id="qrFinal"></div>
+    <p data-i18n="qrNote">Enganxa el QR al costat del tauler i un post-it a cada cantonada.</p>
+  </section>
+
+  <!-- BARRA ADMIN (oculta per defecte) -->
+  <div id="adminBar" class="admin-bar">
+    <span style="color:#fff;font-size:.75rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase" data-i18n="admin">Mode admin</span>
+    <button class="btn danger" onclick="disableAdmin()" data-i18n="adminOff">Desactivar admin</button>
+  </div>
+
+  <!-- FILTRES (sobre el tauler en vista prèvia/AR) -->
+  <div id="filtros" class="filtros" style="position:fixed;top:10px;left:10px;right:10px;z-index:11;display:none;justify-content:center;gap:8px;padding:6px;background:rgba(0,0,0,.7);border-radius:10px;backdrop-filter:blur(8px)">
+    <button class="filtro actiu" data-cat="" data-i18n="catAll">Totes</button>
+  </div>
+
+  <!-- Escena AR -->
+  <div id="cork"></div>
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="dbg"></canvas>
+  <div id="board"></div>
+
+  <div id="hud" class="glass"><b id="hudT">Taulell AR</b><button id="bExit" data-i18n="close">Sortir</button></div>
+  <div id="hint" class="glass"></div>
+  <button id="fab" data-i18n="newPost">＋ Nova notícia</button>
+  <div id="toast" class="glass"></div>
+
+  <!-- Llegir notícia -->
+  <div id="read" class="sheet"><div class="panel" id="readPanel"></div></div>
+
+  <!-- Afegir notícia -->
+  <div id="add" class="sheet">
+    <div class="panel">
+      <div class="grab"></div>
+      <h2 data-i18n="newPost">Nova notícia</h2>
+      <form id="form" autocomplete="off">
+        <label class="l" for="fT" data-i18n="title">Títol</label>
+        <input id="fT" type="text" maxlength="60" required>
+
+        <label class="l" for="fC" data-i18n="category">Categoria</label>
+        <select id="fC"></select>
+
+        <label class="l" for="fD" data-i18n="desc">Descripció</label>
+        <textarea id="fD" rows="3" maxlength="500"></textarea>
+
+        <label class="l" for="fTpl" data-i18n="poster">Mida / plantilla</label>
+        <div class="sw" id="swTpl">
+          <label style="background:#fff;border:2px solid #ccc"><input type="radio" name="tpl" value="s" checked> <small style="font-size:.7rem">Petita</small></label>
+          <label style="background:#fff;border:2px solid #ccc"><input type="radio" name="tpl" value="m"> <small style="font-size:.7rem">Mitjana</small></label>
+          <label style="background:#fff;border:2px solid #ccc"><input type="radio" name="tpl" value="l"> <small style="font-size:.7rem">Gran</small></label>
+        </div>
+
+        <label class="l" data-i18n="poster">Cartell (opcional)</label>
+        <button type="button" class="btn light" id="fFileBtn" data-i18n="import">Importa un PDF o una imatge</button>
+        <button type="button" class="btn light" id="fCapBtn" data-i18n="capture">Fes una foto del cartell</button>
+        <input id="fFile" type="file" accept="application/pdf,image/*" capture="environment">
+        <div id="fFileSt"></div>
+
+        <div id="preview"></div>
+
+        <label class="l" for="fA" data-i18n="author">Autor/a (opcional)</label>
+        <input id="fA" type="text" maxlength="40">
+
+        <label class="l" data-i18n="color">Color de la targeta</label>
+        <div class="sw" id="sw"></div>
+
+        <div class="row" style="margin-top:20px">
+          <button type="button" class="btn light" id="fCancel" data-i18n="cancel">Cancel·la</button>
+          <button type="submit" class="btn alt" id="fOk" data-i18n="publish">Publica</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
