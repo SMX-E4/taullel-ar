@@ -122,6 +122,7 @@
     </nav>
     <div class="brand">
       <h1 data-i18n="appTitle">Taulell<br>AR</h1>
+      <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23007aff'/%3E%3Ctext x='50' y='70' font-family='Arial' font-size='60' text-anchor='middle' fill='white'%3EAR%3C/text%3E%3C/svg%3E">
       <p data-i18n="subtitle">Les notícies de l'institut, sobre el tauler.</p>
       <div style="margin-top:14px;display:flex;gap:8px">
         <button class="btn ghost" style="width:auto;min-height:auto;padding:6px 12px;font-size:.85rem" onclick="setLang('ca')" data-i18n="langCa">Català</button>
@@ -983,6 +984,10 @@
       setLang(LANG);
       if (Store.live && new URLSearchParams(location.search).get("ar") === "1") startAR();
     });
+      if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then(r => r.forEach(x => x.unregister()));
+      caches.keys().then(k => k.forEach(x => caches.delete(x)));
+}
   </script>
 </body>
 </html>
