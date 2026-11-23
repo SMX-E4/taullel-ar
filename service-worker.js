@@ -10,7 +10,6 @@ const ASSETS = [
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
 ];
 
-// Nunca cachear Firebase ni Google APIs (necesario para que Firestore funcione en tiempo real)
 const isFirebaseOrGoogle = (url) =>
   url.includes("firebaseio.com") ||
   url.includes("googleapis.com") ||
@@ -23,13 +22,12 @@ self.addEventListener("install", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = e.request.url;
 
-  // Firebase y Google siempre van directo a la red
+  // Firebase y Google siempre van directo a la red (sin caché)
   if (isFirebaseOrGoogle(url)) {
     e.respondWith(fetch(e.request));
     return;
   }
 
-  // El resto de archivos de la app sí se cachean para funcionar sin conexión
   e.respondWith(
     caches.match(e.request).then((r) => r || fetch(e.request))
   );
