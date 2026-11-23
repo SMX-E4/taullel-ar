@@ -1,5 +1,5 @@
 /* ============================================================
-   Taulell AR — Lógica mejorada
+   Taulell AR — Lógica mejorada (con Firebase)
    ============================================================ */
 
 /* ---------- CONFIGURACIÓ ---------- */
@@ -22,9 +22,9 @@ const DET = {
   baseW: 480,
   maxW: 960,
   minCandidates: 4,
-  graceMs: 2000,          // ms que se mantiene el tauler si es perd un marcador
-  emaAlpha: 0.35,         // suavizado temporal de les 4 vores
-  minAreaRatio: 0.015     // àrea mínima del quadrilàter respecte la imatge
+  graceMs: 2000,
+  emaAlpha: 0.35,
+  minAreaRatio: 0.015
 };
 
 const CATS = {
@@ -40,16 +40,12 @@ const TEMPLATES = {
   l: { label: "Gran", w: 340, h: 430, lines: 8 }
 };
 const SEED = [
-  { id: "n1", cat: "esports", title: "Torneig de ping-pong al pati", date: "2026-11-20", author: "Departament d'Educació Física", color: "#FF9500", x: .27, y: .3, z: 1, reports: 0, tpl: "m",
-    desc: "Divendres 20 de novembre, durant l'esbarjo gran, comença el torneig de ping-pong del pati. Hi pots participar sol/a o en parella. Apunta't a la safata d'Educació Física abans de dijous." },
-  { id: "n2", cat: "cantina", title: "Menú setmanal de la cantina", date: "2026-11-16", author: "Cantina de l'institut", color: "#34C759", x: .72, y: .27, z: 2, reports: 0, tpl: "l",
-    desc: "Dilluns: macarrons i pit de pollastre.\nDimarts: arròs tres delícies i truita.\nDimecres: llenties estofades i peix.\nDijous: canelons i amanida.\nDivendres: pizza casolana i fruita." },
-  { id: "n3", cat: "events", title: "Sortida Codi Gaudí", date: "2026-12-03", author: "Departament de Tecnologia", color: "#AF52DE", x: .3, y: .72, z: 3, reports: 0, tpl: "m",
-    desc: "El 3 de desembre farem l'excursió Codi Gaudí amb l'alumnat de 4t d'ESO. Sortida a les 8:30 des de la porta principal." },
-  { id: "n4", cat: "avisos", title: "Horari de tutories", date: "2026-11-12", author: "Direcció d'estudis", color: "#007AFF", x: .74, y: .7, z: 4, reports: 0, tpl: "s",
-    desc: "Recordatori de l'horari de tutories d'aquest trimestre." }
+  { id: "n1", cat: "esports", title: "Torneig de ping-pong al pati", date: "2026-11-20", author: "Departament d'Educació Física", color: "#FF9500", x: .27, y: .3, z: 1, reports: 0, tpl: "m", desc: "Divendres 20 de novembre, durant l'esbarjo gran, comença el torneig de ping-pong del pati." },
+  { id: "n2", cat: "cantina", title: "Menú setmanal de la cantina", date: "2026-11-16", author: "Cantina de l'institut", color: "#34C759", x: .72, y: .27, z: 2, reports: 0, tpl: "l", desc: "Dilluns: macarrons i pit de pollastre.\nDimarts: arròs tres delícies i truita." },
+  { id: "n3", cat: "events", title: "Sortida Codi Gaudí", date: "2026-12-03", author: "Departament de Tecnologia", color: "#AF52DE", x: .3, y: .72, z: 3, reports: 0, tpl: "m", desc: "El 3 de desembre farem l'excursió Codi Gaudí." },
+  { id: "n4", cat: "avisos", title: "Horari de tutories", date: "2026-11-12", author: "Direcció d'estudis", color: "#007AFF", x: .74, y: .7, z: 4, reports: 0, tpl: "s", desc: "Recordatori de l'horari de tutories." }
 ];
-const ADMIN_PIN = "1234"; // canviar en producció
+const ADMIN_PIN = "1234";
 
 /* ---------- I18N ---------- */
 const TR = {
@@ -168,33 +164,49 @@ const rot = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charC
 const okImg = s => typeof s === "string" && /^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(s);
 let tt; function toast(m) { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(tt); tt = setTimeout(() => t.style.display = "none", 3500); }
 
-/* ---------- DADES ---------- */
+/* ---------- DADES: Firebase (compartit) o localStorage (local) ---------- */
 const LS = "taulellAR.noticies.v2", LSR = "taulellAR.denunciades";
 let hidden; try { hidden = new Set(JSON.parse(localStorage.getItem(LSR) || "[]")); } catch (e) { hidden = new Set(); }
 
 const Store = {
-  live: false, list: [], cbs: [], db: null, col: null, fs: null,
+  live: false, list: [], cbs: [], db: null, col: null, fs: null, seeded: false,
   emit() { this.cbs.forEach(f => f(this.list)); },
   async init() {
     if (FIREBASE_CONFIG) {
       try {
         const B = "https://www.gstatic.com/firebasejs/10.12.2/";
-        const [a, f] = await Promise.all([import(B + "firebase-app.js"), import(B + "firebase-firestore.js")]);
+        const [a, f] = await Promise.all([
+          import(B + "firebase-app.js"),
+          import(B + "firebase-firestore.js")
+        ]);
         this.fs = f;
         this.db = f.getFirestore(a.initializeApp(FIREBASE_CONFIG));
         this.col = f.collection(this.db, "noticies");
-        f.onSnapshot(this.col, s => {
+
+        f.onSnapshot(this.col, (s) => {
           if (s.empty && !s.metadata.fromCache && !this.seeded) {
             this.seeded = true;
-            SEED.forEach(({ id, ...d }) => f.setDoc(f.doc(this.db, "noticies", id), d).catch(() => {}));
+            const batch = f.writeBatch(this.db);
+            SEED.forEach(({ id, ...d }) => {
+              const docRef = f.doc(this.db, "noticies", id);
+              batch.set(docRef, d);
+            });
+            batch.commit().catch(() => {});
             return;
           }
           this.list = s.docs.map(d => ({ id: d.id, ...d.data() }));
           this.emit();
-        }, err => { toast("Error de connexió amb el tauler."); $("#sync").dataset.s = "warn"; $("#sync").textContent = "Error de Firebase: " + (err.code || err.message); });
+        }, (err) => {
+          toast("Error de connexió amb el tauler.");
+          const sy = $("#sync");
+          if (sy) { sy.dataset.s = "warn"; sy.textContent = "Error de Firebase: " + (err.code || err.message); }
+        });
+
         this.live = true;
         return;
-      } catch (e) { toast("Firebase no disponible. S'usa el mode local."); }
+      } catch (e) {
+        toast("Firebase no disponible. S'usa el mode local.");
+      }
     }
     try { this.list = JSON.parse(localStorage.getItem(LS)); } catch (e) { }
     if (!Array.isArray(this.list)) { this.list = SEED.map(n => ({ ...n })); this._save(); }
@@ -223,7 +235,7 @@ const Store = {
 let notes = [], mode = "home", stream = null, drag = null, pending = false, quad = null;
 let adminMode = false, adminPinAttempts = 0;
 let lastValidQuad = null, lastValidTime = 0;
-let activeTouches = new Map(); // pointerId -> {x,y,noteId}
+let activeTouches = new Map();
 const maxZ = () => notes.reduce((m, n) => Math.max(m, n.z || 0), 0);
 
 Store.cbs.push(l => {
@@ -336,11 +348,9 @@ boardEl.addEventListener("pointerdown", e => {
   try { el.setPointerCapture(e.pointerId); } catch (_) { }
 });
 
-// Pinch-to-zoom + drag
 boardEl.addEventListener("pointermove", e => {
   if (!drag) return;
   if (activeTouches.size === 0 || (activeTouches.size === 1 && activeTouches.has(drag.pid))) {
-    // Simple drag
     if (!drag.moved) {
       if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 10) return;
       drag.moved = true;
@@ -354,23 +364,17 @@ boardEl.addEventListener("pointermove", e => {
     drag.el.style.left = drag.x * 100 + "%";
     drag.el.style.top = drag.y * 100 + "%";
   }
-  // update touch map for the moving pointer
   activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY, noteId: drag.id });
   if (activeTouches.size === 2) pinchZoom();
 });
-
-boardEl.addEventListener("pointerup", endDrag);
-boardEl.addEventListener("pointercancel", endDrag);
 
 function pinchZoom() {
   const [t1, t2] = [...activeTouches.values()];
   const d = Math.hypot(t1.x - t2.x, t1.y - t2.y);
   if (!drag || !drag.el) return;
-  // scale factor relative to initial distance (approx)
   const scale = clamp(0.6 + (d - 120) / 300, 0.6, 2.2);
   drag.el.style.setProperty("--note-scale", scale);
   drag.scale = scale;
-  // center between fingers -> move note there
   const cx = (t1.x + t2.x) / 2, cy = (t1.y + t2.y) / 2;
   const p = toBoard(cx, cy);
   if (p) {
@@ -394,6 +398,8 @@ function endDrag(e) {
   }
   if (pending) { pending = false; renderBoard(); }
 }
+boardEl.addEventListener("pointerup", endDrag);
+boardEl.addEventListener("pointercancel", endDrag);
 
 /* ---------- DETECCIÓ MILLORADA ---------- */
 const det = { cv: document.createElement("canvas"), sm: null, seen: 0, timer: 0, told: false, nq: null };
@@ -422,7 +428,6 @@ function stopCam() { clearInterval(det.timer); if (stream) { stream.getTracks().
 function blobs() {
   const v = $("#cam");
   if (!v.videoWidth) return null;
-  // Adaptable: si hi poques candidates, augmentem resolució
   let W = DET.baseW;
   const H = Math.round(W * v.videoHeight / v.videoWidth);
   det.cv.width = W; det.cv.height = H;
@@ -442,30 +447,26 @@ function blobs() {
 
 function analyzeColors(data, W, H) {
   const m = new Uint8Array(W * H), out = [], st = [];
-  // pass 1: máscara de color adaptativa (groc/vermell/taronja/blau-clar)
-  // recollim df per calcular threshold adaptatiu
   const dfs = [];
   for (let i = 0, p = 0; i < data.length; i += 4, p++) {
     const r = data[i], g = data[i + 1], bl = data[i + 2];
-    if (bl >= r || bl >= g) continue; // blau ha de ser el canal més baix
+    if (bl >= r || bl >= g) continue;
     const mx = r > g ? r : g, df = mx - bl;
     if (mx < 90 || df < 20) continue;
     dfs.push({ p, r, g, bl, mx, df });
   }
   if (dfs.length === 0) return out;
   dfs.sort((a, b) => b.df - a.df);
-  const thr = dfs[Math.floor(dfs.length * 0.6)].df * 0.55; // 60è percentil * 0.55
+  const thr = dfs[Math.floor(dfs.length * 0.6)].df * 0.55;
 
   for (const { p, r, g, bl, mx, df } of dfs) {
     if (df < thr) continue;
     const h = r >= g ? 60 * (g - bl) / df : 120 - 60 * (r - bl) / df;
-    // acceptem groc/taronja/vermell/blau-clar (post-it de colors comuns)
     if ((h >= 35 && h <= 75) || (h >= 190 && h <= 260) || (h >= 0 && h <= 20) || (h >= 320 && h <= 360)) {
       m[p] = 1;
     }
   }
 
-  // pass 2: flood fill per components conectades
   for (let s = 0; s < m.length; s++) {
     if (m[s] !== 1) continue;
     let n = 0, sx = 0, sy = 0, x0 = W, x1 = 0, y0 = H, y1 = 0;
@@ -511,7 +512,7 @@ function quadScore(o) {
     if (!c) return 0;
     sg += c > 0 ? 1 : -1;
   }
-  if (Math.abs(sg) !== 4) return 0; // convex
+  if (Math.abs(sg) !== 4) return 0;
   const area = Math.abs(a) / 2;
   const ns = o.map(p => p.n);
   const sim = Math.min(...ns) / Math.max(...ns);
@@ -576,14 +577,13 @@ function detect() {
   let o = bl.length >= 4 ? bestQuad(bl) : null;
   if (!o && bl.length >= 3 && det.nq && now - det.seen < DET.graceMs) o = guess3(bl.slice(0, 3), det.nq);
 
-  // Suavitzat temporal
   if (o) {
     if (det.sm) o = smoothQuad(det.sm, o, DET.emaAlpha);
     det.nq = o;
     lastValidQuad = o;
     lastValidTime = now;
   } else if (lastValidQuad && now - lastValidTime < DET.graceMs) {
-    o = lastValidQuad; // mantenim l'última homografia vàlida
+    o = lastValidQuad;
   }
 
   drawDbg(bl, o || [], v);
@@ -698,7 +698,6 @@ function disableAdmin() {
   toast(t("adminOff"));
 }
 
-// Desbloqueig admin: clic ocult al logo 3 vegades o botó administrador
 let logoClicks = 0;
 $(".brand h1")?.addEventListener("click", () => {
   logoClicks++;
@@ -709,10 +708,7 @@ $(".brand h1")?.addEventListener("click", () => {
   }
 });
 
-// Botó admin a la barra superior (si es vol mostrar sempre)
-// Aquí s'aficha al hud per simplicitat
-
-/* ---------- PUBLICAR (text i/o cartell PDF/imatge) ---------- */
+/* ---------- PUBLICAR ---------- */
 function renderCats() {
   $("#fC").innerHTML = Object.entries(CATS).map(([k, v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join("");
 }
@@ -732,7 +728,6 @@ $("#fCancel").onclick = () => { $("#add").classList.remove("on"); };
 $("#fFileBtn").onclick = () => $("#fFile").click();
 $("#fCapBtn").onclick = () => $("#fFile").click();
 
-// Captura directa amb la càmera (input amb capture)
 $("#fFile").onchange = async e => {
   const f = e.target.files[0];
   pendingImg = null; previewImgUrl = null;
@@ -788,7 +783,6 @@ async function fileToImg(f) {
   return toJpeg(bm, bm.width, bm.height);
 }
 
-// Previsualització en temps real del text
 $("#fT").oninput = updatePreview;
 $("#fD").oninput = updatePreview;
 function updatePreview() {
